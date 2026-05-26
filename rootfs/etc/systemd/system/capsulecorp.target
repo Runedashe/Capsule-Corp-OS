@@ -1,0 +1,7 @@
+[Unit]
+Description=CapsuleCorpOS Crystal Globe Stack
+Requires=ccos-hwdetect.service ccos-disklaw.service ccos-sacurrent.service
+After=ccos-hwdetect.service ccos-disklaw.service
+
+[Install]
+WantedBy=multi-user.target
