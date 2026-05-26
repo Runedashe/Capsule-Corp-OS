@@ -1,0 +1,7 @@
+# CCOS Mouse/Pointing Device Registration Rule
+# Registers to REG_PERIPH_MOUSE (0xA002)
+SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh mouse %k", \
+  SYMLINK+="input/ccos_mouse_%n"
+SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh touchpad %k"
