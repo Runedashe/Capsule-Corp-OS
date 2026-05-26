@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - DISKLAW Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-disklaw.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-disklaw
+
+[Install]
+WantedBy=multi-user.target
