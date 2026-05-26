@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - AVIS Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-avis.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-avis
+
+[Install]
+WantedBy=multi-user.target
