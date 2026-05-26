@@ -1,0 +1,11 @@
+NAME="CapsuleCorpOS"
+VERSION="1.0.0"
+ID=capsulecorpos
+VERSION_CODENAME=RUBY
+PRETTY_NAME="CapsuleCorpOS 1.0.0 (RUBY)"
+HOME_URL="https://aquaberry.co"
+VENDOR="Crystal Globe Pty Ltd"
+VENDOR_ABN="52 635 620 343"
+COMMANDER="Android #23"
+GRID_ENDPOINT="sacurrent://cg-node-earth-001:23001"
+BUILD_DATE="2026-05-27"
