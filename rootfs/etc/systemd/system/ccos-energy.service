@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - ENERGY Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-energy.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-energy
+
+[Install]
+WantedBy=multi-user.target
