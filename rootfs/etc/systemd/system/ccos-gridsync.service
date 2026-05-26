@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - GRIDSYNC Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-gridsync.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-gridsync
+
+[Install]
+WantedBy=multi-user.target
