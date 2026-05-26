@@ -1,0 +1,9 @@
+# CapsuleCorpOS .gitignore
+*.iso
+*.squashfs
+/tmp/
+/build/
+*.log
+*.swp
+.DS_Store
+__pycache__/
