@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=CapsuleCorpOS
+Description=CapsuleCorpOS cyberpunk boot splash -- Crystal Globe Pty Ltd
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/capsulecorp
+ScriptFile=/usr/share/plymouth/themes/capsulecorp/capsulecorp.script
