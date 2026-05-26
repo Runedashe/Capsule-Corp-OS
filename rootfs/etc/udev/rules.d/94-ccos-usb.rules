@@ -1,0 +1,10 @@
+# CCOS USB Device Registration + Security Policy
+# Registers to REG_PERIPH_USB (0xA006)
+# All USB devices must be signed or are read-only by default
+SUBSYSTEM=="usb", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-usbsec-check.sh %k", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh usb %k"
+# Block unrecognised USB storage by default (override with ruby --usbauth)
+SUBSYSTEM=="block", KERNEL=="sd*", ENV{ID_BUS}=="usb", \
+  ENV{CCOS_USB_TRUSTED}!="1", \
+  RUN+="/bin/sh -c 'echo 0 > /sys/block/%k/ro'"
