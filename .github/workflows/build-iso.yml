@@ -1,0 +1,279 @@
+name: Build CapsuleCorpOS ISO
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: false
+        default: 'latest'
+
+jobs:
+  build:
+    name: Build ISO (Debian Bookworm Live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Install build tools ───────────────────────────────────────────────
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            debootstrap squashfs-tools xorriso isolinux \
+            syslinux-utils grub-pc-bin grub-efi-amd64-bin \
+            mtools rsync dialog plymouth plymouth-themes \
+            imagemagick python3-pil
+
+      # ── 3. Bootstrap Debian base ─────────────────────────────────────────────
+      - name: Bootstrap Debian Bookworm base system
+        run: |
+          sudo debootstrap --arch=amd64 --variant=minbase bookworm /tmp/chroot \
+            http://deb.debian.org/debian
+          echo "Bootstrap complete"
+
+      # ── 4. Mount pseudo filesystems ──────────────────────────────────────────
+      - name: Mount pseudo filesystems
+        run: |
+          sudo mount --bind /dev  /tmp/chroot/dev
+          sudo mount --bind /run  /tmp/chroot/run
+          sudo chroot /tmp/chroot mount -t proc    none /proc
+          sudo chroot /tmp/chroot mount -t sysfs   none /sys
+          sudo chroot /tmp/chroot mount -t devpts  none /dev/pts
+
+      # ── 5. Install packages inside chroot ────────────────────────────────────
+      - name: Install packages inside chroot
+        run: |
+          sudo chroot /tmp/chroot /bin/bash -c "
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -q
+            apt-get install -y --no-install-recommends \
+              linux-image-amd64 \
+              systemd systemd-sysv udev \
+              network-manager nftables \
+              openssh-server bluez \
+              pipewire pipewire-alsa alsa-utils \
+              v4l-utils pciutils usbutils \
+              cryptsetup \
+              curl wget python3 \
+              vim nano \
+              net-tools iproute2 iputils-ping \
+              grub-pc grub-efi-amd64 \
+              live-boot live-boot-initramfs-tools \
+              dialog plymouth plymouth-themes \
+              util-linux
+            echo 'capsulecorp' > /etc/hostname
+            useradd -m -s /bin/bash android
+            echo 'android:CrystalGlobe2347' | chpasswd
+            echo 'root:CrystalGlobeRoot' | chpasswd
+          "
+
+      # ── 6. Copy CapsuleCorpOS files into chroot ───────────────────────────────
+      - name: Install CCOS files into chroot
+        run: |
+          # Directory structure
+          sudo mkdir -p /tmp/chroot/etc/capsulecorp
+          sudo mkdir -p /tmp/chroot/opt/capsulecorp/terminal
+          sudo mkdir -p /tmp/chroot/opt/capsulecorp/tui
+          sudo mkdir -p /tmp/chroot/usr/share/plymouth/themes/capsulecorp
+          sudo mkdir -p /tmp/chroot/var/log/capsulecorp
+          sudo mkdir -p /tmp/chroot/var/lib/capsulecorp
+
+          # Terminal shell
+          sudo cp rootfs/opt/capsulecorp/terminal/ruby-shell.sh \
+                   /tmp/chroot/opt/capsulecorp/terminal/ruby-shell.sh
+          sudo chmod +x /tmp/chroot/opt/capsulecorp/terminal/ruby-shell.sh
+
+          # TUI dashboard
+          sudo cp capsulecorp_os/tui/ccos-dashboard.sh \
+                   /tmp/chroot/opt/capsulecorp/tui/ccos-dashboard.sh || \
+          sudo cp tui/ccos-dashboard.sh \
+                   /tmp/chroot/opt/capsulecorp/tui/ccos-dashboard.sh || true
+          sudo chmod +x /tmp/chroot/opt/capsulecorp/tui/ccos-dashboard.sh 2>/dev/null || true
+
+          # Plymouth theme
+          sudo cp capsulecorp_os/plymouth/capsulecorp.script \
+                   /tmp/chroot/usr/share/plymouth/themes/capsulecorp/ || \
+          sudo cp plymouth/capsulecorp.script \
+                   /tmp/chroot/usr/share/plymouth/themes/capsulecorp/ || true
+          sudo cp capsulecorp_os/plymouth/plymouth.theme \
+                   /tmp/chroot/usr/share/plymouth/themes/capsulecorp/ || \
+          sudo cp plymouth/plymouth.theme \
+                   /tmp/chroot/usr/share/plymouth/themes/capsulecorp/ || true
+          sudo cp capsulecorp_os/plymouth/splash.png \
+                   /tmp/chroot/usr/share/plymouth/themes/capsulecorp/ || \
+          sudo cp plymouth/splash.png \
+                   /tmp/chroot/usr/share/plymouth/themes/capsulecorp/ || true
+
+          # Set Plymouth theme + android user shell
+          sudo chroot /tmp/chroot /bin/bash -c "
+            update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+              default.plymouth /usr/share/plymouth/themes/capsulecorp/plymouth.theme 100 2>/dev/null || true
+            update-initramfs -u 2>/dev/null || true
+            usermod -s /opt/capsulecorp/terminal/ruby-shell.sh android 2>/dev/null || true
+          "
+
+      # ── 7. Create squashfs ────────────────────────────────────────────────────
+      - name: Create squashfs filesystem
+        run: |
+          sudo mkdir -p /tmp/iso/live /tmp/iso/boot /tmp/iso/isolinux /tmp/iso/EFI/BOOT
+          sudo mksquashfs /tmp/chroot /tmp/iso/live/filesystem.squashfs \
+            -e boot -comp xz -b 1M -noappend
+          echo "Squashfs size: $(du -sh /tmp/iso/live/filesystem.squashfs | cut -f1)"
+
+      # ── 8. Copy kernel & initrd ───────────────────────────────────────────────
+      - name: Copy kernel and initrd
+        run: |
+          VMLINUZ=$(ls /tmp/chroot/boot/vmlinuz-* | sort -V | tail -1)
+          INITRD=$(ls  /tmp/chroot/boot/initrd.img-* | sort -V | tail -1)
+          sudo cp "$VMLINUZ" /tmp/iso/boot/vmlinuz
+          sudo cp "$INITRD"  /tmp/iso/boot/initrd.img
+          echo "Kernel: $VMLINUZ"
+          echo "Initrd: $INITRD"
+
+      # ── 9. GRUB EFI bootloader ────────────────────────────────────────────────
+      - name: Set up GRUB EFI bootloader
+        run: |
+          cat boot/grub.cfg 2>/dev/null || cat << 'GRUBEOF'
+set default=0
+set timeout=5
+menuentry "CapsuleCorpOS -- Crystal Globe Pty Ltd" {
+    linux /boot/vmlinuz boot=live quiet splash
+    initrd /boot/initrd.img
+}
+menuentry "CapsuleCorpOS -- Safe Mode" {
+    linux /boot/vmlinuz boot=live nomodeset
+    initrd /boot/initrd.img
+}
+GRUBEOF
+          sudo mkdir -p /tmp/iso/boot/grub
+          if [ -f boot/grub.cfg ]; then
+            sudo cp boot/grub.cfg /tmp/iso/boot/grub/grub.cfg
+          else
+            sudo bash -c 'cat > /tmp/iso/boot/grub/grub.cfg << GRUBEOF
+set default=0
+set timeout=5
+menuentry "CapsuleCorpOS -- Crystal Globe Pty Ltd" {
+    linux /boot/vmlinuz boot=live quiet splash
+    initrd /boot/initrd.img
+}
+menuentry "CapsuleCorpOS -- Safe Mode" {
+    linux /boot/vmlinuz boot=live nomodeset
+    initrd /boot/initrd.img
+}
+GRUBEOF'
+          fi
+          sudo grub-mkstandalone \
+            --format=x86_64-efi \
+            --output=/tmp/iso/EFI/BOOT/BOOTX64.EFI \
+            --locales="" \
+            --fonts="" \
+            "boot/grub/grub.cfg=/tmp/iso/boot/grub/grub.cfg"
+          # Create EFI FAT image
+          sudo dd if=/dev/zero of=/tmp/iso/boot/efi.img bs=1M count=10
+          sudo mkfs.vfat /tmp/iso/boot/efi.img
+          sudo mmd -i /tmp/iso/boot/efi.img ::/EFI ::/EFI/BOOT
+          sudo mcopy -i /tmp/iso/boot/efi.img /tmp/iso/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/
+
+      # ── 10. BIOS isolinux bootloader ──────────────────────────────────────────
+      - name: Set up BIOS isolinux bootloader
+        run: |
+          sudo cp /usr/lib/ISOLINUX/isolinux.bin    /tmp/iso/isolinux/
+          sudo cp /usr/lib/syslinux/modules/bios/ldlinux.c32 /tmp/iso/isolinux/
+          if [ -f isolinux/isolinux.cfg ]; then
+            sudo cp isolinux/isolinux.cfg /tmp/iso/isolinux/
+          else
+            sudo bash -c 'cat > /tmp/iso/isolinux/isolinux.cfg << EOF
+UI menu.c32
+PROMPT 0
+TIMEOUT 50
+DEFAULT capsulecorp
+
+LABEL capsulecorp
+    MENU LABEL CapsuleCorpOS -- Crystal Globe Pty Ltd
+    KERNEL /boot/vmlinuz
+    APPEND initrd=/boot/initrd.img boot=live quiet splash
+
+LABEL safe
+    MENU LABEL CapsuleCorpOS -- Safe Mode
+    KERNEL /boot/vmlinuz
+    APPEND initrd=/boot/initrd.img boot=live nomodeset
+EOF'
+          fi
+
+      # ── 11. Build ISO ─────────────────────────────────────────────────────────
+      - name: Build final ISO
+        run: |
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev-$(date +%Y%m%d)")
+          ISO_NAME="CapsuleCorpOS-${VERSION}.iso"
+          sudo xorriso -as mkisofs \
+            -iso-level 3 \
+            -full-iso9660-filenames \
+            -volid "CCOS_${VERSION}" \
+            -eltorito-boot isolinux/isolinux.bin \
+            -eltorito-catalog isolinux/boot.cat \
+            -no-emul-boot -boot-load-size 4 -boot-info-table \
+            --eltorito-alt-boot \
+            -e boot/efi.img \
+            -no-emul-boot \
+            -isohybrid-gpt-basdat \
+            -append_partition 2 0xef /tmp/iso/boot/efi.img \
+            -output "/tmp/${ISO_NAME}" \
+            /tmp/iso
+          echo "ISO built: /tmp/${ISO_NAME}"
+          echo "ISO size: $(du -sh /tmp/${ISO_NAME} | cut -f1)"
+          echo "ISO_NAME=${ISO_NAME}" >> $GITHUB_ENV
+          echo "ISO_PATH=/tmp/${ISO_NAME}" >> $GITHUB_ENV
+
+      # ── 12. Upload ISO as artifact ────────────────────────────────────────────
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CapsuleCorpOS-ISO
+          path: ${{ env.ISO_PATH }}
+          retention-days: 14
+
+      # ── 13. Attach ISO to GitHub Release ─────────────────────────────────────
+      - name: Create or update GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.release_tag || 'latest' }}"
+          # Delete existing 'latest' release if it exists
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+          # Create new release and attach ISO
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "CapsuleCorpOS $TAG" \
+            --notes "## CapsuleCorpOS $TAG
+
+**Crystal Globe Pty Ltd** | ABN 52 635 620 343
+**Inventor:** Shabeen Ashfak (Android #23)
+**Theme:** cyberpunk | **Shell:** RUBY v3.2.0
+
+### Included in this release
+- Cyberpunk RUBY terminal shell (matching capsulecorp.live)
+- TUI dashboard with panel layout
+- Plymouth cyberpunk boot splash
+- Crystal Globe Grid sync services
+- DESTINY_PROTOCOL v1.0 modules
+- AVIS-S / Alientech-G2 firmware stubs
+- 25-module RRA android firmware
+
+### Default credentials
+- **User:** android | **Password:** CrystalGlobe2347
+
+### Boot
+Flash to USB with \`dd\` or Rufus, boot and the RUBY terminal launches automatically." \
+            "${{ env.ISO_PATH }}"
+          echo "Release created: $TAG"
