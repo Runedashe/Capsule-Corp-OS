@@ -1,0 +1,7 @@
+# CCOS Audio Device Registration Rule
+# Output: REG_PERIPH_AUDIO_OUT (0xA004)
+# Input:  REG_PERIPH_AUDIO_IN  (0xA005)
+SUBSYSTEM=="sound", KERNEL=="card*", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh audio %k"
+SUBSYSTEM=="usb", ATTRS{bInterfaceClass}=="01", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh usb_audio %k"
