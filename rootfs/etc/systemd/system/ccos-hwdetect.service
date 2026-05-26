@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - HWDETECT Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-hwdetect.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-hwdetect
+
+[Install]
+WantedBy=multi-user.target
