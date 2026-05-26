@@ -1,0 +1,5 @@
+# CCOS Bluetooth Registration Rule
+# REG_PERIPH_BT (0xA007)
+# Only auto-pairs Crystal Globe registered devices
+SUBSYSTEM=="bluetooth", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh bluetooth %k"
