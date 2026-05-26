@@ -1,0 +1,4 @@
+# CCOS Camera Registration Rule
+# REG_PERIPH_CAM (0xA008)
+SUBSYSTEM=="video4linux", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh camera %k"
