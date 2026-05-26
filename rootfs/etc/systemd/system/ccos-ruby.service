@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - RUBY Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-ruby.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-ruby
+
+[Install]
+WantedBy=multi-user.target
