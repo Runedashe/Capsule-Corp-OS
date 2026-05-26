@@ -1,0 +1,66 @@
+/* ============================================================
+   CapsuleCorpOS Plymouth Boot Splash Theme
+   Name: capsulecorp
+   Theme: cyberpunk | Crystal Globe Pty Ltd | Android #23
+   ============================================================ */
+
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+/* ---- Background ---- */
+background = Rectangle();
+background.SetColor(10/255, 14/255, 26/255, 1);
+background.SetPosition(0, 0);
+background.SetSize(screen_width, screen_height);
+
+/* ---- Logo ---- */
+logo_image = Image("splash.png");
+logo_sprite = Sprite(logo_image);
+logo_sprite.SetX(screen_width  / 2 - logo_image.GetWidth()  / 2);
+logo_sprite.SetY(screen_height / 2 - logo_image.GetHeight() / 2);
+logo_sprite.SetZ(1);
+
+/* ---- Progress Bar ---- */
+bar_width  = 600;
+bar_height = 8;
+bar_x      = screen_width / 2 - bar_width / 2;
+bar_y      = screen_height - 80;
+
+/* Bar background (outline) */
+bar_bg = Rectangle();
+bar_bg.SetColor(0, 80/255, 100/255, 1);
+bar_bg.SetPosition(bar_x, bar_y);
+bar_bg.SetSize(bar_width, bar_height);
+bar_bg.SetZ(2);
+
+/* Bar fill */
+bar_fill = Rectangle();
+bar_fill.SetColor(0, 220/255, 255/255, 1);
+bar_fill.SetPosition(bar_x, bar_y);
+bar_fill.SetSize(0, bar_height);
+bar_fill.SetZ(3);
+
+/* ---- Progress Callback ---- */
+fun progress_callback(duration, progress) {
+    bar_fill.SetSize(Math.Int(bar_width * progress), bar_height);
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+/* ---- Message / Status Text ---- */
+message_sprite = Sprite();
+message_sprite.SetPosition(screen_width / 2 - 300, screen_height - 50);
+message_sprite.SetZ(4);
+
+fun display_message_callback(text) {
+    msg_image = Image.Text(text, 0, 220/255, 255/255, 1, "DejaVu Sans Mono 14");
+    message_sprite.SetImage(msg_image);
+}
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+
+/* ---- Boot Normal (hide on login) ---- */
+fun boot_progress_callback(time, progress) {
+    bar_fill.SetSize(Math.Int(bar_width * progress), bar_height);
+}
+Plymouth.SetBootProgressFunction(boot_progress_callback);
