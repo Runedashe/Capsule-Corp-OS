@@ -1,0 +1,16 @@
+[Unit]
+Description=CapsuleCorpOS - USBSEC Service
+After=network.target
+PartOf=capsulecorp.target
+
+[Service]
+Type=simple
+ExecStart=/opt/capsulecorp/terminal/ccos-usbsec.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ccos-usbsec
+
+[Install]
+WantedBy=multi-user.target
