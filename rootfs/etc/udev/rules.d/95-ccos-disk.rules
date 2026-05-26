@@ -1,0 +1,9 @@
+# CCOS Disk Itemisation Law — Auto-Registration
+# Triggers CG-SIL v1.0 registration for every new disk
+# REG_DISK_ENUM (0xC001)
+SUBSYSTEM=="block", KERNEL=="sd[a-z]", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-disklaw.sh auto-register %k"
+SUBSYSTEM=="block", KERNEL=="nvme[0-9]n[0-9]", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-disklaw.sh auto-register %k"
+SUBSYSTEM=="block", KERNEL=="mmcblk[0-9]", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-disklaw.sh auto-register %k"
