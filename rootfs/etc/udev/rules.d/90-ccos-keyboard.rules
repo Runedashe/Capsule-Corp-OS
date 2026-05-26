@@ -1,0 +1,9 @@
+# CCOS Keyboard Registration Rule
+# Registers all HID keyboards to REG_PERIPH_KB (0xA001)
+SUBSYSTEM=="input", ATTRS{bInterfaceClass}=="03", ATTRS{bInterfaceSubClass}=="01", \
+  ENV{ID_INPUT_KEYBOARD}=="1", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh keyboard %k", \
+  SYMLINK+="input/ccos_keyboard_%n"
+# PS/2 keyboard
+SUBSYSTEM=="input", ATTRS{name}=="*AT Translated*", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh keyboard %k"
