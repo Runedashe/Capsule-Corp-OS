@@ -1,0 +1,6 @@
+# CCOS Display Registration Rule
+# Registers to REG_PERIPH_DISPLAY (0xA003)
+SUBSYSTEM=="drm", ACTION=="add", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh display %k"
+SUBSYSTEM=="drm", ACTION=="change", \
+  RUN+="/opt/capsulecorp/terminal/ccos-periph-register.sh display_hotplug %k"
