@@ -1,0 +1,87 @@
+name: Build Capsule Corp ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/bootable-iso]
+    paths:
+      - iso/**
+      - CapsuleCorp-cloud-build.zip
+      - .github/workflows/build-capsule-iso.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: capsule-iso-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Extract the approved source bundle
+        run: python3 -m zipfile -e CapsuleCorp-cloud-build.zip .
+      - name: Check workspace capacity
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h "$RUNNER_TEMP"
+          available=$(df -Pm "$RUNNER_TEMP" | awk 'NR==2 {print $4}')
+          if (( available < 12000 )); then
+            echo 'At least 12 GB of free workspace is required for this build.' >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/capsule-build"
+      - name: Build Debian live ISO
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --privileged \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/iso,target=/work" \
+            --mount "type=bind,source=$RUNNER_TEMP/capsule-build,target=/var/tmp" \
+            --env DEBIAN_FRONTEND=noninteractive \
+            debian:trixie-slim bash /work/CapsuleCorp-build/build.sh
+      - name: Verify checksum and boot catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd iso
+          sha256sum -c CapsuleCorpOS-live-amd64.sha256
+          test -s CapsuleCorpOS-boot-report.txt
+          grep -E 'BIOS' CapsuleCorpOS-boot-report.txt
+          grep -E 'UEFI|EFI' CapsuleCorpOS-boot-report.txt
+      - name: Capture BIOS and UEFI boot screens for inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf
+          python3 iso/boot-capture.py iso/CapsuleCorpOS-live-amd64.iso iso/boot-captures
+      - name: Save ISO and checksum
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: CapsuleCorpOS-live-amd64
+          path: |
+            iso/CapsuleCorpOS-live-amd64.iso
+            iso/CapsuleCorpOS-live-amd64.sha256
+            iso/CapsuleCorpOS-boot-report.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Save build log and boot captures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: CapsuleCorp-build-diagnostics
+          path: |
+            iso/CapsuleCorp-build/build.log
+            iso/CapsuleCorpOS-boot-report.txt
+            iso/boot-captures/
+          if-no-files-found: warn
+          retention-days: 7
