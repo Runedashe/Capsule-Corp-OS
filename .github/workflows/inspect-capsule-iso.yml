@@ -23,7 +23,7 @@ jobs:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: CapsuleCorpOS-live-amd64
-          run-id: 34064293032
+          run-id: 34094999964
           github-token: ${{ github.token }}
           path: iso
       - name: Verify and split the existing ISO for download
