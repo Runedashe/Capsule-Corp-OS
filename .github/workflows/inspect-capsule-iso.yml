@@ -1,0 +1,85 @@
+name: Inspect and deliver Capsule Corp ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/bootable-iso]
+    paths:
+      - retest-boot-capture.py
+      - .github/workflows/inspect-capsule-iso.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: CapsuleCorpOS-live-amd64
+          run-id: 34064293032
+          github-token: ${{ github.token }}
+          path: iso
+      - name: Verify and split the existing ISO for download
+        run: |
+          set -euo pipefail
+          cd iso
+          sha256sum -c CapsuleCorpOS-live-amd64.sha256
+          split -b 400000000 -d -a 1 CapsuleCorpOS-live-amd64.iso CapsuleCorpOS.iso.part-
+          sha256sum CapsuleCorpOS.iso.part-* > parts.sha256
+      - name: Save download part 0 and verification files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: CapsuleCorpOS-part-0
+          path: |
+            iso/CapsuleCorpOS.iso.part-0
+            iso/CapsuleCorpOS-live-amd64.sha256
+            iso/CapsuleCorpOS-boot-report.txt
+            iso/parts.sha256
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save download part 1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: CapsuleCorpOS-part-1
+          path: iso/CapsuleCorpOS.iso.part-1
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save download part 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: CapsuleCorpOS-part-2
+          path: iso/CapsuleCorpOS.iso.part-2
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save download part 3
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: CapsuleCorpOS-part-3
+          path: iso/CapsuleCorpOS.iso.part-3
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Boot the live system in BIOS and UEFI
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf
+          python3 retest-boot-capture.py iso/CapsuleCorpOS-live-amd64.iso boot-inspection --seconds 240
+      - name: Save startup inspection evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: CapsuleCorp-startup-inspection
+          path: boot-inspection/
+          retention-days: 7
+          if-no-files-found: warn
