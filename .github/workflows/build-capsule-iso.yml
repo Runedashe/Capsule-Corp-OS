@@ -26,6 +26,26 @@ jobs:
           persist-credentials: false
       - name: Extract the approved source bundle
         run: python3 -m zipfile -e CapsuleCorp-cloud-build.zip .
+      - name: Make the local login independent of kiosk server timing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          session = Path('iso/CapsuleCorp-build/overlay/usr/local/bin/capsule-session')
+          session.write_text(session.read_text().replace('http://127.0.0.1:8080/login', 'file:///opt/capsulecorp/app/boot-login.html'))
+          page = Path('iso/CapsuleCorp-build/app/public/boot-login.html')
+          text = page.read_text()
+          text = text.replace('src="/capsule-corp-logo.png"', 'src="capsule-corp-logo.png"')
+          text = text.replace('Checking Internet connectivity…', 'Internet connectivity')
+          text = text.replace('NetworkManager is checking available connections.', 'Use Wi-Fi setup to join a network before entering the workspace.')
+          text = text.replace('<button id="setup">Open Wi-Fi setup</button><a href="/">Open Capsule Corp workspace</a>', '<a id="setup" href="http://127.0.0.1:8080/api/local/network/setup">Open Wi-Fi setup</a><a href="http://127.0.0.1:8080/">Open Capsule Corp workspace</a>')
+          text = text.replace("document.querySelector('#setup').onclick=async()=>{await fetch('/api/local/network/setup',{method:'POST'});details.textContent='Network setup opened in a separate window.'};", '')
+          page.write_text(text)
+          server = Path('iso/CapsuleCorp-build/overlay/opt/capsulecorp/server.py')
+          text = server.read_text()
+          marker = "        if path.startswith('/api/'):\n"
+          addition = "        if path == '/api/local/network/setup':\n            try:\n                return self.json_response(200, open_network_setup())\n            except OSError:\n                return self.json_response(503, {'error': 'Could not open network setup'})\n"
+          server.write_text(text.replace(marker, addition + marker))
+          PY
       - name: Check workspace capacity
         shell: bash
         run: |
@@ -41,11 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm --privileged \
-            --mount "type=bind,source=$GITHUB_WORKSPACE/iso,target=/work" \
-            --mount "type=bind,source=$RUNNER_TEMP/capsule-build,target=/var/tmp" \
-            --env DEBIAN_FRONTEND=noninteractive \
-            debian:trixie-slim bash /work/CapsuleCorp-build/build.sh
+          docker run --rm --privileged             --mount "type=bind,source=$GITHUB_WORKSPACE/iso,target=/work"             --mount "type=bind,source=$RUNNER_TEMP/capsule-build,target=/var/tmp"             --env DEBIAN_FRONTEND=noninteractive             debian:trixie-slim bash /work/CapsuleCorp-build/build.sh
       - name: Verify checksum and boot catalog
         shell: bash
         run: |
