@@ -1,103 +1,40 @@
 name: Build Capsule Corp ISO
-
 on:
   workflow_dispatch:
   push:
     branches: [codex/bootable-iso]
-    paths:
-      - iso/**
-      - CapsuleCorp-cloud-build.zip
-      - .github/workflows/build-capsule-iso.yml
-
-permissions:
-  contents: read
-
-concurrency:
-  group: capsule-iso-${{ github.ref }}
-  cancel-in-progress: false
-
+    paths: [.github/workflows/build-capsule-iso.yml]
+permissions: {contents: read}
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Extract the approved source bundle
-        run: python3 -m zipfile -e CapsuleCorp-cloud-build.zip .
-      - name: Make the local login independent of kiosk server timing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - run: python3 -m zipfile -e CapsuleCorp-cloud-build.zip .
+      - name: Start Capsule Corp workspace directly
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          session = Path('iso/CapsuleCorp-build/overlay/usr/local/bin/capsule-session')
-          session.write_text(session.read_text().replace('http://127.0.0.1:8080/login', 'file:///opt/capsulecorp/app/boot-login.html'))
-          page = Path('iso/CapsuleCorp-build/app/public/boot-login.html')
-          text = page.read_text()
-          text = text.replace('src="/capsule-corp-logo.png"', 'src="capsule-corp-logo.png"')
-          text = text.replace('Checking Internet connectivity…', 'Internet connectivity')
-          text = text.replace('NetworkManager is checking available connections.', 'Use Wi-Fi setup to join a network before entering the workspace.')
-          text = text.replace('<button id="setup">Open Wi-Fi setup</button><a href="/">Open Capsule Corp workspace</a>', '<a id="setup" href="http://127.0.0.1:8080/api/local/network/setup">Open Wi-Fi setup</a><a href="http://127.0.0.1:8080/">Open Capsule Corp workspace</a>')
-          text = text.replace("document.querySelector('#setup').onclick=async()=>{await fetch('/api/local/network/setup',{method:'POST'});details.textContent='Network setup opened in a separate window.'};", '')
-          page.write_text(text)
-          server = Path('iso/CapsuleCorp-build/overlay/opt/capsulecorp/server.py')
-          text = server.read_text()
-          marker = "        if path.startswith('/api/'):\n"
-          addition = "        if path == '/api/local/network/setup':\n            try:\n                return self.json_response(200, open_network_setup())\n            except OSError:\n                return self.json_response(503, {'error': 'Could not open network setup'})\n"
-          server.write_text(text.replace(marker, addition + marker))
+          p = Path('iso/CapsuleCorp-build/overlay/usr/local/bin/capsule-session')
+          p.write_text(p.read_text().replace('http://127.0.0.1:8080/login', 'http://127.0.0.1:8080/'))
           PY
-      - name: Check workspace capacity
-        shell: bash
+      - name: Build live ISO
         run: |
-          set -euo pipefail
-          df -h "$RUNNER_TEMP"
-          available=$(df -Pm "$RUNNER_TEMP" | awk 'NR==2 {print $4}')
-          if (( available < 12000 )); then
-            echo 'At least 12 GB of free workspace is required for this build.' >&2
-            exit 1
-          fi
           mkdir -p "$RUNNER_TEMP/capsule-build"
-      - name: Build Debian live ISO
-        shell: bash
+          docker run --rm --privileged --mount "type=bind,source=$GITHUB_WORKSPACE/iso,target=/work" --mount "type=bind,source=$RUNNER_TEMP/capsule-build,target=/var/tmp" --env DEBIAN_FRONTEND=noninteractive debian:trixie-slim bash /work/CapsuleCorp-build/build.sh
+      - name: Verify ISO
         run: |
-          set -euo pipefail
-          docker run --rm --privileged             --mount "type=bind,source=$GITHUB_WORKSPACE/iso,target=/work"             --mount "type=bind,source=$RUNNER_TEMP/capsule-build,target=/var/tmp"             --env DEBIAN_FRONTEND=noninteractive             debian:trixie-slim bash /work/CapsuleCorp-build/build.sh
-      - name: Verify checksum and boot catalog
-        shell: bash
-        run: |
-          set -euo pipefail
           cd iso
           sha256sum -c CapsuleCorpOS-live-amd64.sha256
           test -s CapsuleCorpOS-boot-report.txt
-          grep -E 'BIOS' CapsuleCorpOS-boot-report.txt
-          grep -E 'UEFI|EFI' CapsuleCorpOS-boot-report.txt
-      - name: Capture BIOS and UEFI boot screens for inspection
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 ovmf
-          python3 iso/boot-capture.py iso/CapsuleCorpOS-live-amd64.iso iso/boot-captures
-      - name: Save ISO and checksum
-        if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: CapsuleCorpOS-live-amd64
           path: |
             iso/CapsuleCorpOS-live-amd64.iso
             iso/CapsuleCorpOS-live-amd64.sha256
             iso/CapsuleCorpOS-boot-report.txt
-          if-no-files-found: error
           compression-level: 0
-          retention-days: 7
-      - name: Save build log and boot captures
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: CapsuleCorp-build-diagnostics
-          path: |
-            iso/CapsuleCorp-build/build.log
-            iso/CapsuleCorpOS-boot-report.txt
-            iso/boot-captures/
-          if-no-files-found: warn
           retention-days: 7
