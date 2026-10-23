@@ -23,6 +23,10 @@ jobs:
 
           root = Path('iso/CapsuleCorp-build')
           pages = root / 'app/src/pages'
+          build_script = root / 'build.sh'
+          build_script.write_text(build_script.read_text().replace(
+              'cp "$HERE/hooks/0500-capsule.hook.chroot" config/hooks/normal/\nchmod +x config/hooks/normal/0500-capsule.hook.chroot',
+              'cp "$HERE"/hooks/*.hook.chroot config/hooks/normal/\nchmod +x config/hooks/normal/*.hook.chroot'))
 
           # Always start Capsule Corp instead of showing a Debian login screen.
           lightdm = root / 'overlay/etc/lightdm/lightdm.conf'
