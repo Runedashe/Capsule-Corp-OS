@@ -1,15 +1,12 @@
 name: Build Capsule Corp ISO
 
-
 on:
   workflow_dispatch:
   push:
     branches: [codex/bootable-iso]
     paths: [.github/workflows/build-capsule-iso.yml]
 
-
 permissions: {contents: read}
-
 
 jobs:
   build:
@@ -24,10 +21,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-
           root = Path('iso/CapsuleCorp-build')
           pages = root / 'app/src/pages'
-
 
           # Always start Capsule Corp instead of showing a Debian login screen.
           lightdm = root / 'overlay/etc/lightdm/lightdm.conf'
@@ -41,20 +36,17 @@ jobs:
           account.write_text('[User]\nXSession=capsule\nSystemAccount=false\n')
           hook = root / 'hooks/0600-capsule-display-manager.hook.chroot'
           hook.parent.mkdir(parents=True, exist_ok=True)
-          hook.write_text('#!/bin/sh\nset -eu\nprintf \\'%s\\n\\' /usr/sbin/lightdm > /etc/X11/default-display-manager\nsystemctl enable lightdm.service || true\nsystemctl disable gdm3.service || true\n')
+          hook.write_text("#!/bin/sh\nset -eu\nprintf '%s\n' /usr/sbin/lightdm > /etc/X11/default-display-manager\nsystemctl enable lightdm.service || true\nsystemctl disable gdm3.service || true\n")
           hook.chmod(0o755)
-
 
           def remove_region(text, start, end):
               before, remainder = text.split(start, 1)
               _, after = remainder.split(end, 1)
               return before + end + after
 
-
           def remove_social_controls(text):
               text = remove_region(text, '      <div className="flex flex-col gap-3 mb-6">', '      <div className="relative mb-6">')
               return remove_region(text, '      <div className="relative mb-6">', '      {error && (')
-
 
           login_path = pages / 'Login.jsx'
           login = login_path.read_text()
@@ -62,7 +54,6 @@ jobs:
           login = remove_region(login, '  const handleGoogle = ', '  return (')
           login = remove_social_controls(login)
           login_path.write_text(login)
-
 
           register_path = pages / 'Register.jsx'
           register = register_path.read_text()
@@ -118,4 +109,3 @@ jobs:
             iso/CapsuleCorpOS-boot-report.txt
           compression-level: 0
           retention-days: 7
-
