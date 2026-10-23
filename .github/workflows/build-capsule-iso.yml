@@ -28,19 +28,33 @@ jobs:
               'cp "$HERE/hooks/0500-capsule.hook.chroot" config/hooks/normal/\nchmod +x config/hooks/normal/0500-capsule.hook.chroot',
               'cp "$HERE"/hooks/*.hook.chroot config/hooks/normal/\nchmod +x config/hooks/normal/*.hook.chroot'))
 
-          # Always start Capsule Corp instead of showing a Debian login screen.
+          # Use LightDM only; remove Debian's GNOME greeter from the live system.
+          build_script.write_text(build_script.read_text().replace(
+              "quiet splash'",
+              "quiet splash loglevel=0 systemd.show_status=false rd.udev.log_level=0'"))
           lightdm = root / 'overlay/etc/lightdm/lightdm.conf'
           lightdm.parent.mkdir(parents=True, exist_ok=True)
           lightdm.write_text('[Seat:*]\nautologin-user=user\nautologin-user-timeout=0\nautologin-session=capsule\nuser-session=capsule\n')
-          gdm = root / 'overlay/etc/gdm3/daemon.conf'
-          gdm.parent.mkdir(parents=True, exist_ok=True)
-          gdm.write_text('[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=user\n')
-          account = root / 'overlay/var/lib/AccountsService/users/user'
-          account.parent.mkdir(parents=True, exist_ok=True)
-          account.write_text('[User]\nXSession=capsule\nSystemAccount=false\n')
           hook = root / 'hooks/0600-capsule-display-manager.hook.chroot'
           hook.parent.mkdir(parents=True, exist_ok=True)
-          hook.write_text("#!/bin/sh\nset -eu\nprintf '%s\n' /usr/sbin/lightdm > /etc/X11/default-display-manager\nsystemctl enable lightdm.service || true\nsystemctl disable gdm3.service || true\n")
+          hook.write_text(
+              "#!/bin/sh\n"
+              "set -eu\n"
+              "export DEBIAN_FRONTEND=noninteractive\n"
+              "# gdm3 is the Debian login screen shown in the failed ISO. Remove it.\n"
+              "apt-get purge -y gdm3 || true\n"
+              "apt-get install -y --no-install-recommends lightdm\n"
+              "mkdir -p /etc/lightdm/lightdm.conf.d /etc/systemd/system\n"
+              "cat > /etc/lightdm/lightdm.conf.d/90-capsule-autologin.conf <<'EOF'\n"
+              "[Seat:*]\n"
+              "autologin-user=user\n"
+              "autologin-user-timeout=0\n"
+              "autologin-session=capsule\n"
+              "user-session=capsule\n"
+              "EOF\n"
+              "systemctl disable gdm3.service gdm.service || true\n"
+              "systemctl enable lightdm.service\n"
+              "ln -sfn /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service\n")
           hook.chmod(0o755)
 
           def remove_region(text, start, end):
@@ -104,6 +118,18 @@ jobs:
           cd iso
           sha256sum -c CapsuleCorpOS-live-amd64.sha256
           test -s CapsuleCorpOS-boot-report.txt
+      - name: Inspect Capsule startup in the ISO
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools
+          mkdir -p "$RUNNER_TEMP/capsule-inspect"
+          xorriso -osirrox on -indev iso/CapsuleCorpOS-live-amd64.iso -extract /live/filesystem.squashfs "$RUNNER_TEMP/capsule-inspect/filesystem.squashfs"
+          unsquashfs -cat "$RUNNER_TEMP/capsule-inspect/filesystem.squashfs" etc/lightdm/lightdm.conf | grep -Fx 'autologin-session=capsule'
+          unsquashfs -cat "$RUNNER_TEMP/capsule-inspect/filesystem.squashfs" etc/lightdm/lightdm.conf.d/90-capsule-autologin.conf | grep -Fx 'autologin-user=user'
+          unsquashfs -ll "$RUNNER_TEMP/capsule-inspect/filesystem.squashfs" etc/systemd/system/display-manager.service | grep -F 'lightdm.service'
+          unsquashfs -l "$RUNNER_TEMP/capsule-inspect/filesystem.squashfs" | grep -F 'usr/share/xsessions/capsule.desktop'
+          ! unsquashfs -l "$RUNNER_TEMP/capsule-inspect/filesystem.squashfs" | grep -F 'usr/sbin/gdm3'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: CapsuleCorpOS-live-amd64
